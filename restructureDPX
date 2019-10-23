@@ -15,6 +15,7 @@ usage(){
     echo "$(basename "${0}")"
     echo "This application will create a the desired directory structure and filenames for DPX packages received from VFS."
     echo "The options below are optional; simply run '$(basename ${0})' if you would prefer to be prompted for each input."
+    echo "Do not append a trailing slash to your directories."
     echo "Usage: $(basename ${0}) [ -d /path/to/deliver/to/ ] [ -i DPX_Object_ID ] [ -t DPX_Object_Title ] [ -r (number of reels) ] [ -c ] dpxpackage"
     echo "  -d directory (directory to deliver the resulting package to)"
     echo "  -i DPX_Object_ID (ex. 2012_79_1_54)"
@@ -62,12 +63,12 @@ restructureDPX(){
         echo
     fi
     if [[ -z "${deliverdir}" ]] ; then
-        printf "%sPlease drag in the full path to the destination (where the new directory should be created):\n%s" "${biwhite}" "${color_off}"
+        printf "%sPlease drag in the full path to the destination (where the new directory should be created) (no trailing slash):\n%s" "${biwhite}" "${color_off}"
         read -r deliverdir
         echo
     fi
     if [[ -z "${input}" ]] ; then
-        printf "%sPlease drag in the full path to the input directory:\n%s" "${biwhite}" "${color_off}"
+        printf "%sPlease drag in the full path to the input directory (no trailing slash):\n%s" "${biwhite}" "${color_off}"
         read -r input
         echo
     fi
@@ -79,8 +80,15 @@ restructureDPX(){
         1 )
             printf "%sMoving files from %s ${input}\n${biwhite}${color_off}"
             if [[ -d "${outputdir}" ]] ; then
-                # find and move any .wav files fom $input to $outputdir
-                for wavpath in "${input}"/*WAV ; do
+                rsync -av "${input}/" "${outputdir}"
+                RSYNC_ERR="${?}"
+                if [[ -n "${RSYNC_ERR}" ]] && [[ "${RSYNC_ERR}" -gt "0" ]] ; then
+                    echo "${RSYNC_ERR}"
+                    printf "${bired}Initial rsync process failed. Exiting script...${color_off}\n"
+                    exit 1
+                fi
+                # find and rename .wav directories
+                for wavpath in "${outputdir}"/*WAV ; do
                     if [[ ! -d "${wavpath}" ]]; then
                         printf "\n\t%sNo .wav directory found.%s\n" "${biwhite}" "${color_off}"
                         echo
@@ -92,8 +100,8 @@ restructureDPX(){
                         done
                     fi
                 done
-                # find and move and .mov files from $input to $outputdir
-                for movpath in "${input}"/*MOV ; do
+                # find and rename .mov directories
+                for movpath in "${outputdir}"/*MOV ; do
                     if [[ ! -d "${movpath}" ]] ; then
                         printf "\n\t%sNo .mov directory found.%s\n" "${biwhite}" "${color_off}"
                         echo
@@ -105,8 +113,8 @@ restructureDPX(){
                         done
                     fi
                 done
-                # move DPX directory from $input to $outputdir and rename
-                for dpxpath in "${input}"/*DPX ; do
+                # find and rename DPX directories
+                for dpxpath in "${outputdir}"/*DPX ; do
                     if [[ ! -d "${dpxpath}" ]] ; then
                         printf "\n\t%sNo DPX directory found.%s\n" "${biwhite}" "${color_off}"
                         echo
@@ -146,6 +154,14 @@ restructureDPX(){
             ;;
 
         2 )
+            printf "%sMoving files from%s %s" "${biwhite}" "${color_off}" "${input}"
+            rsync -av "${input}/" "${outputdir}"
+            RSYNC_ERR="${?}"
+            if [[ -n "${RSYNC_ERR}" ]] && [[ "${RSYNC_ERR}" -gt "0" ]] ; then
+                echo "${RSYNC_ERR}"
+                printf "${bired}Initial rsync process failed. Exiting script...${color_off}\n"
+                exit 1
+            fi
             # make separate subdirectories for R1 and R2, with further subdirectories for the different components
             R1=("${outputdir}/${packagename}_R1")
             audR1="${R1}/${packagename}_R1__Audio"
@@ -155,52 +171,45 @@ restructureDPX(){
             audR2="${R2}/${packagename}_R2__Audio"
             derR2="${R2}/${packagename}_R2__Derivatives"
             dpxR2="${R2}/${packagename}_R2__DPX"
-        
             mkdir -p "${R1}" "${audR1}" "${derR1}" "${dpxR1}" "${R2}" "${audR2}" "${derR2}" "${dpxR2}"
-        
-            echo
-            printf "%sMoving files from%s %s" "${biwhite}" "${color_off}" "${input}"
-
             # find and move audio, derivatives, and DPX files for each reel in turn. Finds files based on filenaming + extension; assumes each file will have reel # in filename + lowercase extension.
             if [[ -d "${audR1}" ]] ; then
-                find "${input}" -name "*R1*.wav" -exec rsync -av {} "${audR1}" \;
+                find "${outputdir}" -name "*R1*.wav" -exec mv -vi {} "${audR1}" \;
             else
                 printf "%sMissing ${audR1}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${derR1}" ]] ; then
-                find "${input}" -name "*R1*.mov" -exec rsync -av {} "${derR1}" \;
+                find "${outputdir}" -name "*R1*.mov" -exec mv -vi {} "${derR1}" \;
             else
                 printf "%sMissing ${derR1}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${dpxR1}" ]] ; then
-                find "${input}" -name "*R1*.dpx" -exec rsync -av {} "${dpxR1}" \;
+                find "${outputdir}" -name "*R1*.dpx" -exec mv -vi {} "${dpxR1}" \;
             else
                 printf "%sMissing ${dpxR1}%s" "${bired}" "${color_off}"
                 exit 1
             fi
 
             if [[ -d "${audR2}" ]] ; then
-                find "${input}" -name "*R2*.wav" -exec rsync -av {} "${audR2}" \;
+                find "${outputdir}" -name "*R2*.wav" -exec mv -vi {} "${audR2}" \;
             else
                 printf "%sMissing ${audR2}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${derR2}" ]] ; then
-                find "${input}" -name "*R2*.mov" -exec rsync -av {} "${derR2}" \;
+                find "${outputdir}" -name "*R2*.mov" -exec mv -vi {} "${derR2}" \;
             else
                 printf "%sMissing ${derR2}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${dpxR2}" ]] ; then
-                find "${input}" -name "*R2*.dpx" -exec rsync -av {} "${dpxR2}" \;
+                find "${outputdir}" -name "*R2*.dpx" -exec mv -vi {} "${dpxR2}" \;
             else
                 printf "%sMissing ${dpxR2}%s" "${bired}" "${color_off}"
                 exit 1
             fi
-
-            echo
             # rename files according to NMAAHC filenaming guidelines
             printf "%sRenaming files in %s%s\n" "${biwhite}" "${color_off}" "${outputdir}"
             find "${audR1}" -name "*R1*.wav" -exec mv -vi {} "${audR1}/${dpxid}_R1_AUD.wav" \;
@@ -212,6 +221,15 @@ restructureDPX(){
             ;;
 
         3 )
+            printf "%sMoving files from%s %s\n" "${biwhite}" "${color_off}" "${input}"
+            rsync -av "${input}/" "${outputdir}"
+            RSYNC_ERR="${?}"
+            # exit script if rsync did not complete successfully
+            if [[ -n "${RSYNC_ERR}" ]] && [[ "${RSYNC_ERR}" -gt "0" ]] ; then
+                echo "${RSYNC_ERR}"
+                printf "${bired}Initial rsync process failed: ${RSYNC_ERR} \nExiting script...${color_off}\n"
+                exit 1
+            fi
             # make separate subdirectories for R1, R2, and R3, with further subdirectories for the different components
             R1=("${outputdir}/${packagename}_R1")
             audR1="${R1}/${packagename}_R1__Audio"
@@ -226,67 +244,64 @@ restructureDPX(){
             derR3="${R3}/${packagename}_R3__Derivatives"
             dpxR3="${R3}/${packagename}_R3__DPX"
             mkdir -p "${R1}" "${audR1}" "${derR1}" "${dpxR1}" "${R2}" "${audR2}" "${derR2}" "${dpxR2}" "${R3}" "${audR3}" "${derR3}" "${dpxR3}"
-            echo
-            printf "%sMoving files from%s %s" "${biwhite}" "${color_off}" "${input}"
 
             # find and move audio, derivatives, and DPX files for each reel in turn. Finds files based on filenaming + extension; assumes each file will have reel # in filename + lowercase extension.
             if [[ -d "${audR1}" ]] ; then
-                find "${input}" -name "*R1*.wav" -exec rsync -av {} "${audR1}" \;
+                find "${outputdir}" -name "*R1*.wav" -exec mv -vi {} "${audR1}" \;
             else
                 printf "%sMissing ${audR1}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${derR1}" ]] ; then
-                find "${input}" -name "*R1*.mov" -exec rsync -av {} "${derR1}" \;
+                find "${outputdir}" -name "*R1*.mov" -exec mv -vi {} "${derR1}" \;
             else
                 printf "%sMissing ${derR1}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${dpxR1}" ]] ; then
-                find "${input}" -name "*R1*.dpx" -exec rsync -av {} "${dpxR1}" \;
+                find "${outputdir}" -name "*R1*.dpx" -exec mv -vi {} "${dpxR1}" \;
             else
                 printf "%sMissing ${dpxR1}%s" "${bired}" "${color_off}"
                 exit 1
             fi
 
             if [[ -d "${audR2}" ]] ; then
-                find "${input}" -name "*R2*.wav" -exec rsync -av {} "${audR2}" \;
+                find "${outputdir}" -name "*R2*.wav" -exec mv -vi {} "${audR2}" \;
             else
                 printf "%sMissing ${audR2}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${derR2}" ]] ; then
-                find "${input}" -name "*R2*.mov" -exec rsync -av {} "${derR2}" \;
+                find "${outputdir}" -name "*R2*.mov" -exec mv -vi {} "${derR2}" \;
             else
                 printf "%sMissing ${derR2}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${dpxR2}" ]] ; then
-                find "${input}" -name "*R2*.dpx" -exec rsync -av {} "${dpxR2}" \;
+                find "${outputdir}" -name "*R2*.dpx" -exec mv -vi {} "${dpxR2}" \;
             else
                 printf "%sMissing ${dpxR2}%s" "${bired}" "${color_off}"
                 exit 1
             fi
 
             if [[ -d "${audR3}" ]] ; then
-                find "${input}" -name "*R3*.wav" -exec rsync -av {} "${audR3}" \;
+                find "${outputdir}" -name "*R3*.wav" -exec mv -vi {} "${audR3}" \;
             else
                 printf "%sMissing ${audR3}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${derR3}" ]] ; then
-                find "${input}" -name "*R3*.mov" -exec rsync -av {} "${derR3}" \;
+                find "${outputdir}" -name "*R3*.mov" -exec mv -vi {} "${derR3}" \;
             else
                 printf "%sMissing ${derR3}%s" "${bired}" "${color_off}"
                 exit 1
             fi
             if [[ -d "${dpxR3}" ]] ; then
-                find "${input}" -name "*R3*.dpx" -exec rsync -av {} "${dpxR3}" \;
+                find "${outputdir}" -name "*R3*.dpx" -exec mv -vi {} "${dpxR3}" \;
             else
                 printf "%sMissing ${dpxR3}%s" "${bired}" "${color_off}"
                 exit 1
             fi
-            echo
             # rename files according to NMAAHC filenaming guidelines
             printf "%sRenaming files in %s%s\n" "${biwhite}" "${color_off}" "${outputdir}"
             find "${audR1}" -name "*R1*.wav" -exec mv -vi {} "${audR1}/${dpxid}_R1_AUD.wav" \;
@@ -294,12 +309,11 @@ restructureDPX(){
             find "${derR1}" -name "*R1*Uncompressed*.mov" -exec mv -vi {} "${derR1}/${dpxid}_R1_DER_02.mov" \;
             find "${audR2}" -name "*R2*.wav" -exec mv -vi {} "${audR2}/${dpxid}_R2_AUD.wav" \;
             find "${derR2}" -name "*R2*ProRes*.mov" -exec mv -vi {} "${derR2}/${dpxid}_R2_DER_01.mov" \;
-            find "${derR2}" -name "*R2*Uncompressed*.mov" -exec mv -vi {} "${derR1}/${dpxid}_R2_DER_02.mov" \;
+            find "${derR2}" -name "*R2*Uncompressed*.mov" -exec mv -vi {} "${derR2}/${dpxid}_R2_DER_02.mov" \;
             find "${audR3}" -name "*R3*.wav" -exec mv -vi {} "${audR3}/${dpxid}_R3_AUD.wav" \;
             find "${derR3}" -name "*R3*ProRes*.mov" -exec mv -vi {} "${derR3}/${dpxid}_R3_DER_01.mov" \;
             find "${derR3}" -name "*R3*Uncompressed*.mov" -exec mv -vi {} "${derR3}/${dpxid}_R3_DER_02.mov" \;
             ;;
-
             *   )
             printf "%sERROR. Presently, this script can only handle DPX packages of 1 or 2 or 3 reels. Check back later." "${bired}"
             echo
@@ -313,12 +327,9 @@ restructureDPX(){
 # log script beginning
 _log -b
 restructureDPX "${@}"
-if [[ -z "${cleanupdecision}" ]] ; then
-    printf "${biwhite}Remove input directory? Type Y or y for yes, any other key for no: ${color_off}\n"
-    read cleanupdecision
-fi
-if [[ "${cleanupdecision}" == "Y" ]] || [[ "${cleanupdecision}" == "y" ]] ; then
-    rm -vr "${input}" # remove input directory. -v=verbose, -r=recursive
+# if the operator has asked to remove the source directory, and there were no rsync errors, then rm the source directory
+if [[ "${cleanupdecision}" == "Y" ]] && [[ "${RSYNC_ERR}" -eq 0 ]] ; then
+    rm -vr "${input}" # -v=verbose, -r=recursive
 fi
 # log script ending
 _log -e
